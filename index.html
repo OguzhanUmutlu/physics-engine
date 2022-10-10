@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Physics Simulation</title>
+</head>
+<body>
+<canvas></canvas>
+<div class="info">
+    α = <span id="angle-l"></span> <input id="angle-i" type="range" min="0" max="89" value="30"><br>
+    <input id="color" type="color" value="#ff6464">
+</div>
+</body>
+<style>
+    * {
+        user-select: none;
+        font-family: Calibri, serif;
+    }
+
+    .info {
+        position: absolute;
+    }
+
+    canvas {
+        position: absolute;
+        left: 0;
+        top: 0;
+    }
+</style>
+<script src="physics.js"></script>
+</html>
