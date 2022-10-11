@@ -67,10 +67,8 @@ class Box extends Vector2 { // square
     };
 
     pos() {
-        const x = world.width / 2 + this.size / 2;
-        const y = world.height - tan(rad(ground.alpha)) * x - this.size / 1.5;
-        this.x = x;
-        this.y = y;
+        this.x = world.width / 2 + this.size / 2;
+        this.y = world.height - tan(rad(ground.alpha + .5)) * this.x;
     };
 
     draw() {
@@ -84,6 +82,7 @@ class Box extends Vector2 { // square
         ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
         ctx.strokeRect(this.x - this.size / 2, this.y - this.size / 2, this.size + 1, this.size + 1);
         ctx.restore();
+        ctx.fillRect(this.x, this.y, 1, 1);
     };
 
     update() {
@@ -133,8 +132,9 @@ const animate = () => {
     ctx.fillText("α", cos(rad(ground.alpha / 2)) * 60, world.height - sin(rad(ground.alpha / 2)) * 60);
     window.fps = null;
     const a = document.querySelector("#angle-i").value * 1;
-    if (a !== ground.alpha) box.pos();
+    const old = ground.alpha;
     ground.alpha = a;
+    if (a !== old) box.pos();
     document.querySelector("#angle-l").innerHTML = ground.alpha + "°";
     box.color = document.querySelector("#color").value;
 };
