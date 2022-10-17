@@ -1,5 +1,5 @@
-# physics-playground
-Physics playground that I made with the things we learned in school
+# physics-engine
+Physics engine that I made with the stuff we learned in school
 
 Haven't done much.
 
