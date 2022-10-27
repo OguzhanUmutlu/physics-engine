@@ -9,7 +9,13 @@
 <script src="engine.js"></script>
 <script type="module">
     await window.Phygic;
-    const {Vector2, Shapes, Tile, World, Utils: {Animator, CanvasResizer, centerCanvas}} = window.Phygic;
+    const {
+        Vector2,
+        Shapes,
+        Tile,
+        World,
+        Utils: {Animator, CanvasResizer, centerCanvas, MouseConstraint}
+    } = window.Phygic;
     const canvas = document.querySelector("canvas");
 
     const world = new World(canvas);
@@ -22,26 +28,25 @@
     const canvasResizer = CanvasResizer(canvas);
     //canvasResizer.remove();
 
-    const tile = new Tile(20, 20, {
+    const mouseConstraint = MouseConstraint(world);
+
+    new Tile(20, 20, {
         shape: new Shapes.Rectangle(20, 20), world
     });
-
     const ground = new Tile(canvas.width / 2, canvas.height - 20, {
         gravityEnabled: false, shape: new Shapes.Rectangle(8000, 10), world
+    });
+    new Tile(300, 500, {
+        gravityEnabled: false, shape: new Shapes.Polygon([
+            [-100, -50],
+            [10, 10],
+            [-100,10]
+        ]), world
     });
 
     canvasResizer.addCallback(() => {
         ground.x = canvas.width / 2;
         ground.y = canvas.height - 20;
-    });
-
-    let down = false;
-
-    addEventListener("mousedown", () => down = true);
-    addEventListener("mouseup", () => down = false);
-
-    addEventListener("mousemove", ev => {
-        if (down) tile.motion.set(new Vector2(ev.clientX - tile.x, ev.clientY - tile.y));
     });
 </script>
 </body>
