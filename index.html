@@ -6,6 +6,9 @@
 </head>
 <body>
 <canvas></canvas>
+<div style="position: absolute; right: 10px; top: 10px; pointer-events: none; font-family: Calibri, serif">
+
+</div>
 <script src="engine.js"></script>
 <script type="module">
     await window.Phygic;
@@ -14,39 +17,57 @@
         Shapes,
         Tile,
         World,
-        Utils: {Animator, CanvasResizer, centerCanvas, MouseConstraint}
+        Utils: {Animator, CanvasResizer, centerCanvas, MouseConstraint, CameraMover}
     } = window.Phygic;
     const canvas = document.querySelector("canvas");
 
-    const world = new World(canvas);
+    const world = new World(canvas, {
+        render: {
+            collisions: {
+                color: "#00ff00"
+            }
+        }
+    });
 
     const animator = Animator([world.update, world.render]);
-
-    const canvasCenter = centerCanvas(canvas);
-    //canvasCenter.remove();
-
-    const canvasResizer = CanvasResizer(canvas);
-    //canvasResizer.remove();
-
-    const mouseConstraint = MouseConstraint(world);
-
-    new Tile(20, 20, {
-        shape: new Shapes.Rectangle(20, 20), world
+    animator.addCallback(() => {
+        document.querySelector("div").innerHTML = `
+${animator.getFPS()} FPS<br>
+${Date.now() - tile.lastUpdate} Δt`;
     });
-    const ground = new Tile(canvas.width / 2, canvas.height - 20, {
-        gravityEnabled: false, shape: new Shapes.Rectangle(8000, 10), world
+
+    centerCanvas(canvas);
+
+    CanvasResizer(canvas);
+
+    MouseConstraint(world);
+
+    CameraMover(world);
+
+    const tile = new Tile(50, 50, {shape: new Shapes.Rectangle(20, 20), world});
+
+    new Tile(canvas.width / 2, canvas.height, {
+        gravityEnabled: false,
+        shape: new Shapes.Rectangle(8000, 1),
+        world
     });
+    new Tile(0, canvas.height / 2, {
+        gravityEnabled: false,
+        shape: new Shapes.Rectangle(1, 1000),
+        world
+    });
+    new Tile(canvas.width, canvas.height / 2, {
+        gravityEnabled: false,
+        shape: new Shapes.Rectangle(1, 1000),
+        world
+    });
+
     new Tile(300, 500, {
         gravityEnabled: false, shape: new Shapes.Polygon([
             [-100, -50],
             [10, 10],
-            [-100,10]
+            [-100, 10]
         ]), world
-    });
-
-    canvasResizer.addCallback(() => {
-        ground.x = canvas.width / 2;
-        ground.y = canvas.height - 20;
     });
 </script>
 </body>
