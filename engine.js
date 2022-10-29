@@ -43,6 +43,12 @@
         Object.keys(extend.prototype).forEach(f => self.prototype[f] = extend.prototype[f]);
     }
 
+    function positiveModulo(a, b) {
+        a = a % b;
+        if (a < 0) a += b;
+        return a;
+    }
+
     function Vector2(x = 0, y = 0) {
         this.x = x;
         this.y = y;
@@ -377,12 +383,13 @@
         // NOTE: I got the square root of the bottom area(not sure what I could have done)
         const terminalVelocity = sqrt(2 * this.mass * world.gravityAcceleration / (world.fluidDensity * sqrt(this.getBottomArea()) * this.dragCoefficient));
         //if (this.velocity.y > terminalVelocity) this.velocity.y = terminalVelocity;
+        this.velocity.set(this.velocity.add(this.force.scale(1/this.mass)));
+        if(!this.move(world,this.velocity)) this.velocity.set(Vector2.zero());
         if (this.gravityEnabled) {
             this.gravitationalVelocity += this.mass * world.gravityAcceleration * deltaTime / 1000;
             if (!this.move(world, new Vector2(0, this.gravitationalVelocity))) this.gravitationalVelocity = 0;
             this.horizontalVelocity += this.mass * world.gravityAcceleration * deltaTime / 1000 * -sin(this.rotation);
-            console.log()
-            if (!this.move(world, new Vector2(Math.cos(this.rotation) * this.horizontalVelocity, Math.sin(this.rotation) * this.horizontalVelocity))) this.horizontalVelocity = 0;
+            if (!this.move(world, new Vector2(Math.sin(this.rotation + Math.PI / 2) * this.horizontalVelocity, Math.cos(this.rotation + Math.PI / 2) * this.horizontalVelocity))) this.horizontalVelocity = 0;
         }
         if (round(this.motion.x) !== 0 && round(this.motion.y) !== 0) this.move(world, new Vector2(this.motion.x / 10, this.motion.y / 10));
         this.motion.set(this.motion.scale(9 / 10));
@@ -393,6 +400,7 @@
         this.horizontalVelocity = 0;
         this.velocity.set(Vector2.zero());
         this.motion.set(Vector2.zero());
+        this.force.set(Vector2.zero());
     };
 
     const worlds = {};
@@ -636,7 +644,7 @@
         Tile,
         World,
         Utils: {Animator, CanvasResizer, centerCanvas, MouseConstraint, CameraMover},
-        DevUtils: {processOptions, extendClass}
+        DevUtils: {processOptions, extendClass, positiveModulo}
     };
     _p(_exports.Phygic);
 })();

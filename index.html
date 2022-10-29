@@ -6,7 +6,7 @@
 </head>
 <body>
 <canvas></canvas>
-<div style="position: absolute; right: 10px; top: 10px; pointer-events: none; font-family: Calibri, serif">
+<div class="board">
 
 </div>
 <script src="engine.js"></script>
@@ -29,13 +29,27 @@
         }
     });
 
-    const animator = Animator([world.update, world.render]);
-    animator.addCallback(() => {
-        document.querySelector("div").innerHTML = `
-${animator.getFPS()} FPS<br>
-${Date.now() - tile.lastUpdate} Δt`;
-    });
+    const MANUAL_ANIMATOR = false;
 
+    if (MANUAL_ANIMATOR) {
+        addEventListener("click", () => {
+            world.update();
+            world.render();
+        });
+    } else {
+        const animator = Animator([world.update, world.render]);
+        const board = [
+            () => `${animator.getFPS()} frame/s`,
+            () => `Δt = ${Date.now() - tile.lastUpdate} ms`,
+            () => `m = ${tile.mass} kg`,
+            () => `v<sub>g</sub> = ${tile.gravitationalVelocity.toFixed(2)} m/s`,
+            () => `v<sub>h</sub> = ${tile.horizontalVelocity.toFixed(2)} m/s`,
+            () => `v<sub>h</sub> = ${(tile.rotation / Math.PI * 180).toFixed(2)}°`,
+        ];
+        animator.addCallback(() => {
+            document.querySelector(".board").innerHTML = board.map(i => `<div>${i()}</div>`).join("");
+        });
+    }
     centerCanvas(canvas);
 
     CanvasResizer(canvas);
@@ -69,6 +83,28 @@ ${Date.now() - tile.lastUpdate} Δt`;
             [-100, 10]
         ]), world
     });
+
+    addEventListener("dblclick",ev=>{
+        const vec = world.getMouseVector(ev).sub(tile);
+        const a = Math.atan2(vec.x,vec.y);
+        const x = Math.sin(a);
+        const y = Math.cos(a);
+        tile.force.set(new Vector2(x,y).scale(10));
+    });
 </script>
+<style>
+    * {
+        font-family: Calibri, serif;
+        user-select: none;
+    }
+
+    .board {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        width: 100px;
+        pointer-events: none;
+    }
+</style>
 </body>
 </html>
