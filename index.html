@@ -38,15 +38,20 @@
         });
     } else {
         const animator = Animator([world.update, world.render]);
+        let frictionInfo;
         const board = [
             () => `${animator.getFPS()} frame/s`,
             () => `Δt = ${Date.now() - tile.lastUpdate} ms`,
             () => `m = ${tile.mass} kg`,
-            () => `v<sub>g</sub> = ${tile.gravitationalVelocity.toFixed(2)} m/s`,
+            () => `v<sub>v</sub> = ${tile.verticalVelocity.toFixed(2)} m/s`,
             () => `v<sub>h</sub> = ${tile.horizontalVelocity.toFixed(2)} m/s`,
-            () => `v<sub>h</sub> = ${(tile.rotation / Math.PI * 180).toFixed(2)}°`,
+            () => `θ = ${(tile.rotation / Math.PI * 180).toFixed(2)}°`,
+            () => `F<sub>f</sub> = ${frictionInfo.frictionForce.toFixed(2)} N`,
+            () => `μ<sub>s</sub> = ${frictionInfo.staticCoefficient.toFixed(2)}`,
+            () => `μ<sub>k</sub> = ${frictionInfo.kineticCoefficient.toFixed(2)}`,
         ];
         animator.addCallback(() => {
+            frictionInfo = tile.getGroundFrictionForce(world);
             document.querySelector(".board").innerHTML = board.map(i => `<div>${i()}</div>`).join("");
         });
     }
@@ -61,36 +66,36 @@
     const tile = new Tile(50, 50, {shape: new Shapes.Rectangle(20, 20), world});
 
     new Tile(canvas.width / 2, canvas.height, {
-        gravityEnabled: false,
+        isStatic: true,
         shape: new Shapes.Rectangle(8000, 1),
         world
     });
     new Tile(0, canvas.height / 2, {
-        gravityEnabled: false,
+        isStatic: true,
         shape: new Shapes.Rectangle(1, 1000),
         world
     });
     new Tile(canvas.width, canvas.height / 2, {
-        gravityEnabled: false,
+        isStatic: true,
         shape: new Shapes.Rectangle(1, 1000),
         world
     });
 
     new Tile(300, 500, {
-        gravityEnabled: false, shape: new Shapes.Polygon([
-            [-100, -50],
-            [10, 10],
-            [-100, 10]
-        ]), world
+        isStatic: true, shape: new Shapes.Rectangle(10, 100), world,
+        kineticFrictionCoefficient: 0, staticFrictionCoefficient: 0,
+        rotation: Math.PI / 3
     });
 
-    addEventListener("dblclick",ev=>{
+    addEventListener("dblclick", ev => {
         const vec = world.getMouseVector(ev).sub(tile);
-        const a = Math.atan2(vec.x,vec.y);
+        const a = Math.atan2(vec.x, vec.y);
         const x = Math.sin(a);
         const y = Math.cos(a);
-        tile.force.set(new Vector2(x,y).scale(10));
+        tile.force.set(new Vector2(x, y).scale(10));
     });
+    window.tt = tile;
+    window.ww = world;
 </script>
 <style>
     * {

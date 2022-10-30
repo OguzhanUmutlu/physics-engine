@@ -205,8 +205,8 @@
     function Tile(x = 0, y = 0, opts) {
         Vector2.apply(this, arguments);
         opts = processOptions(opts, {
-            shape: null, rotation: 0, gravityEnabled: true, world: null, mass: 10,
-            staticFrictionCoefficient: 0, kineticFrictionCoefficient: 0
+            shape: null, rotation: 0, isStatic: false, world: null, mass: 10,
+            staticFrictionCoefficient: 0, kineticFrictionCoefficient: 0, dragCoefficient: 1
         }, 1);
         const id = _id++;
         tiles[id] = this;
@@ -216,14 +216,16 @@
         this.shape = opts.shape;
         this.rotation = opts.rotation;
         this.rotationTarget = opts.rotation;
-        this.gravitationalVelocity = 0;
+        this.verticalVelocity = 0;
         this.horizontalVelocity = 0;
-        this.velocity = Vector2.zero();
         this.force = Vector2.zero();
         this.motion = Vector2.zero();
         this.mass = opts.mass;
-        this.gravityEnabled = opts.gravityEnabled;
-        this.dragCoefficient = 1;
+        this.isStatic = opts.isStatic;
+        this.dragCoefficient = opts.dragCoefficient;
+        this.staticFrictionCoefficient = opts.staticFrictionCoefficient;
+        this.kineticFrictionCoefficient = opts.kineticFrictionCoefficient;
+        this.airTicks = 0;
         this.outOfDistance = false;
         if (opts.world instanceof World) opts.world.addTile(this);
         this.initOptions = opts;
@@ -326,7 +328,7 @@
         return Array.from(world.tiles).find(i => i !== this && i.collidesWith(this));
     };
     Tile.prototype.move = function (world, vec) {
-        //if (!this.gravityEnabled) return false;
+        //if (this.isStatic) return false;
         let collision;
         collision = this.getCollisions(world);
         if (collision) return false;
@@ -345,6 +347,8 @@
             if (collision) break;
         }
         if (collision) {
+            this.lastMoveGround = {tile: collision};
+            this.airTicks = 0;
             if (collision.shape && (collision.shape.type === "polygon" || collision.shape.type === "rectangle")) {
                 const nearest = collision.shape.path.map((i, j) => {
                     const next = collision.shape.path[collision.shape.path.length === j + 1 ? 0 : j + 1];
@@ -366,7 +370,9 @@
                 }).sort((a, b) => a[1] - b[1])[0];
                 if (nearest) {
                     if (abs(nearest[0]) === Infinity) nearest[0] = 0;
+                    this.lastMoveGround.slope = nearest[0];
                     this.rotationTarget = -atan(nearest[0]);
+                    this.lastMoveGround.rotation = -atan(nearest[0]);
                     if (this.rotationTarget === 90) this.rotationTarget = 0;
                 }
             }
@@ -382,23 +388,78 @@
         if (deltaTime > 100) console.warn(deltaTime);
         // NOTE: I got the square root of the bottom area(not sure what I could have done)
         const terminalVelocity = sqrt(2 * this.mass * world.gravityAcceleration / (world.fluidDensity * sqrt(this.getBottomArea()) * this.dragCoefficient));
-        //if (this.velocity.y > terminalVelocity) this.velocity.y = terminalVelocity;
-        this.velocity.set(this.velocity.add(this.force.scale(1/this.mass)));
-        if(!this.move(world,this.velocity)) this.velocity.set(Vector2.zero());
-        if (this.gravityEnabled) {
-            this.gravitationalVelocity += this.mass * world.gravityAcceleration * deltaTime / 1000;
-            if (!this.move(world, new Vector2(0, this.gravitationalVelocity))) this.gravitationalVelocity = 0;
-            this.horizontalVelocity += this.mass * world.gravityAcceleration * deltaTime / 1000 * -sin(this.rotation);
+        if (!this.isStatic) {
+            this.verticalVelocity += (this.mass * world.gravityAcceleration + this.force.y / this.mass) * deltaTime / 1000;
+            if (!this.move(world, new Vector2(0, this.verticalVelocity))) this.verticalVelocity = 0;
+
+            this.horizontalVelocity += this.getHorizontalAcceleration(world) * deltaTime / 1000;
             if (!this.move(world, new Vector2(Math.sin(this.rotation + Math.PI / 2) * this.horizontalVelocity, Math.cos(this.rotation + Math.PI / 2) * this.horizontalVelocity))) this.horizontalVelocity = 0;
         }
         if (round(this.motion.x) !== 0 && round(this.motion.y) !== 0) this.move(world, new Vector2(this.motion.x / 10, this.motion.y / 10));
         this.motion.set(this.motion.scale(9 / 10));
         this.rotation += (this.rotationTarget - this.rotation) / 2;
+        this.airTicks++;
+    };
+    Tile.prototype.isOnGround = function () {
+        return this.airTicks <= 2 && !!this.lastMoveGround;
+    };
+    Tile.prototype.getGroundFrictionForce = function (world) {
+        const onGround = this.isOnGround();
+        const μk = onGround ? this.lastMoveGround.tile.kineticFrictionCoefficient : 0;
+        const μs = onGround ? this.lastMoveGround.tile.staticFrictionCoefficient : 0;
+        const groundRotation = onGround ? this.lastMoveGround.rotation : 0;
+        const gh = this.mass * world.gravityAcceleration * -sin(groundRotation);
+        const gv = this.mass * world.gravityAcceleration * cos(groundRotation);
+        const Fh = this.force.x / (-sin(groundRotation) || 1);
+        const Fv = this.force.y / cos(groundRotation);
+        const N = gv + Fv;
+        const totalH = gh + Fh;
+        if (onGround) {
+            const Ffk = μk * N;
+            const Ffs = μs * N;
+            return {
+                hasPassedStatic: totalH > Ffs,
+                frictionForce: totalH > Ffs ? Ffk : totalH,
+                kineticCoefficient: μk, staticCoefficient: μs
+            };
+        } else return {
+            hasPassedStatic: false, frictionForce: 0, kineticCoefficient: 0, staticCoefficient: 0
+        };
+    };
+    Tile.prototype.getHorizontalAcceleration = function (world) {
+        if (!this._lastHorizontalAcceleration) this._lastHorizontalAcceleration = [];
+        const onGround = this.isOnGround();
+        const μk = onGround ? this.lastMoveGround.tile.kineticFrictionCoefficient : 0;
+        const μs = onGround ? this.lastMoveGround.tile.staticFrictionCoefficient : 0;
+        const groundRotation = onGround ? this.lastMoveGround.rotation : 0;
+        if (this._lastHorizontalAcceleration[0] === onGround && this._lastHorizontalAcceleration[1] === μk && this._lastHorizontalAcceleration[2] === μs && this._lastHorizontalAcceleration[3] === groundRotation) return this._lastHorizontalAcceleration[4];
+        this._lastHorizontalAcceleration = [
+            onGround, μk, μs, groundRotation
+        ];
+
+        const gh = this.mass * world.gravityAcceleration * -sin(groundRotation);
+        const gv = this.mass * world.gravityAcceleration * cos(groundRotation);
+
+        const Fh = this.force.x / (-sin(groundRotation) || 1);
+        const Fv = this.force.y / cos(groundRotation);
+
+        const N = gv + Fv;
+        const totalH = gh + Fh;
+
+        let FNet = totalH;
+
+        if (onGround) {
+            const Ffk = μk * N;
+            const Ffs = μs * N;
+            const Fs = totalH > Ffs ? Ffk : totalH;
+            FNet -= Fs;
+        }
+        this._lastHorizontalAcceleration[4] = FNet / this.mass;
+        return this._lastHorizontalAcceleration[4];
     };
     Tile.prototype.resetVelocities = function () {
-        this.gravitationalVelocity = 0;
+        this.verticalVelocity = 0;
         this.horizontalVelocity = 0;
-        this.velocity.set(Vector2.zero());
         this.motion.set(Vector2.zero());
         this.force.set(Vector2.zero());
     };
@@ -566,9 +627,9 @@
                 }
             }
             if (tile) {
-                if (drag && drag.tile) drag.tile.gravityEnabled = drag.gravity;
-                drag = {tile, gravity: tile.gravityEnabled, mouse: vec, tileVec: tile.clone()};
-                tile.gravityEnabled = false;
+                if (drag && drag.tile) drag.tile.isStatic = drag.gravity;
+                drag = {tile, gravity: tile.isStatic, mouse: vec, tileVec: tile.clone()};
+                tile.isStatic = true;
             }
         });
         l(el, "mousemove", ev => {
@@ -579,12 +640,12 @@
         });
         l(el, "mouseup", () => {
             down = false;
-            if (drag) drag.tile.gravityEnabled = drag.gravity;
+            if (drag) drag.tile.isStatic = drag.gravity;
             drag = null;
         });
         l(window, "blur", () => {
             down = false;
-            if (drag) drag.tile.gravityEnabled = drag.gravity;
+            if (drag) drag.tile.isStatic = drag.gravity;
             drag = null;
         });
         return {
