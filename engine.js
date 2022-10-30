@@ -400,7 +400,7 @@
 
             this.horizontalVelocity += this.getHorizontalAcceleration(world) * deltaTime / 1000;
             if (!this.move(world, new Vector2(sin(this.rotation + PI / 2) * this.horizontalVelocity, cos(this.rotation + PI / 2) * this.horizontalVelocity))) this.horizontalVelocity = 0;
-            if (this.airTicks > 5) {
+            if (this.airTicks > 3) {
                 if (this.rotationTarget > 0) this.rotationTarget -= Math.PI / 180;
                 if (this.rotationTarget < 0) this.rotationTarget += Math.PI / 180;
             }
