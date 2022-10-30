@@ -21,7 +21,7 @@
         if (isWeb) cancelAnimationFrame(f);
     };
     const collider = new Collider2D.Collider2D();
-    const {PI, floor, ceil, round, sqrt, pow, sin, cos, tan, abs, atan, atan2} = Math;
+    const {PI, floor, ceil, round, sqrt, pow, sin, cos, tan, abs, atan, atan2, min, max} = Math;
 
     function processOptions(options, def, mode = 0) {
         if (typeof options !== "object" || Array.isArray(options)) options = {};
@@ -338,7 +338,7 @@
         const lRotation = atan2(vec.x, vec.y);
         //const radius = this.getRadius();
         const moveVec = new Vector2(sin(lRotation), cos(lRotation));//.scale(radius/2);
-        const dist = Math.min(ceil(vec.len() / moveVec.len()), world.maxRayCastingIterations);
+        const dist = min(ceil(vec.len() / moveVec.len()), world.maxRayCastingIterations);
         for (let i = 0; i < dist; i++) {
             back = this.clone();
             if (i === dist - 1) this.set(start.add(vec));
@@ -350,8 +350,9 @@
             this.lastMoveGround = {tile: collision};
             this.airTicks = 0;
             if (collision.shape && (collision.shape.type === "polygon" || collision.shape.type === "rectangle")) {
-                const nearest = collision.shape.path.map((i, j) => {
-                    const next = collision.shape.path[collision.shape.path.length === j + 1 ? 0 : j + 1];
+                const shapePath = (collision.shape._lastPoints || collision.shape.path);
+                const nearest = shapePath.map((i, j) => {
+                    const next = shapePath[shapePath.length === j + 1 ? 0 : j + 1];
                     return new Collider2D.Polygon(new Collider2D.Vector(collision.x, collision.y), [
                         new Collider2D.Vector(i[0], i[1]),
                         new Collider2D.Vector(next[0], next[1])
@@ -359,15 +360,20 @@
                 }).filter(i => this.collidesWith(i)).map(i => {
                     const from = {x: i.points[0].x + collision.x, y: i.points[0].y + collision.y};
                     const to = {x: i.points[1].x + collision.x, y: i.points[1].y + collision.y};
+                    // NOTE: I don't use the wikipedia's formula anymore
                     // https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line#Line%20defined%20by%20an%20equation
                     const a = (to.y - from.y) / (to.x - from.x);
-                    const b = -1;
-                    const c = from.y - a * from.x;
-                    const x0 = this.x;
-                    const y0 = this.y;
-                    const dist = abs(a * x0 + b * y0 + c) / sqrt(a ** 2 + b ** 2);
-                    return [a, dist];
-                }).sort((a, b) => a[1] - b[1])[0];
+                    //const b = -1;
+                    const c = from.y - a * from.x; // ax + c = y
+                    //const x0 = this.x;
+                    //const y0 = this.y;
+                    // Thanks to Olly :p
+                    //const dist = abs(a * x0 + b * y0 + c) / sqrt(a ** 2 + b ** 2);
+                    const mag = 1 + a ** 2;
+                    //const vec = [(this.x + a * (this.y - c)) / mag, (a * this.x + a ** 2 * (this.y - c)) / mag + c];
+                    const vecY = (a * this.x + a ** 2 * (this.y - c)) / mag + c;
+                    return [a, vecY];
+                }).sort((a, b) => b[1] - a[1])[0];
                 if (nearest) {
                     if (abs(nearest[0]) === Infinity) nearest[0] = 0;
                     this.lastMoveGround.slope = nearest[0];
@@ -393,7 +399,11 @@
             if (!this.move(world, new Vector2(0, this.verticalVelocity))) this.verticalVelocity = 0;
 
             this.horizontalVelocity += this.getHorizontalAcceleration(world) * deltaTime / 1000;
-            if (!this.move(world, new Vector2(Math.sin(this.rotation + Math.PI / 2) * this.horizontalVelocity, Math.cos(this.rotation + Math.PI / 2) * this.horizontalVelocity))) this.horizontalVelocity = 0;
+            if (!this.move(world, new Vector2(sin(this.rotation + PI / 2) * this.horizontalVelocity, cos(this.rotation + PI / 2) * this.horizontalVelocity))) this.horizontalVelocity = 0;
+            if (this.airTicks > 5) {
+                if (this.rotationTarget > 0) this.rotationTarget -= Math.PI / 180;
+                if (this.rotationTarget < 0) this.rotationTarget += Math.PI / 180;
+            }
         }
         if (round(this.motion.x) !== 0 && round(this.motion.y) !== 0) this.move(world, new Vector2(this.motion.x / 10, this.motion.y / 10));
         this.motion.set(this.motion.scale(9 / 10));

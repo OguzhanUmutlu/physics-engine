@@ -82,18 +82,11 @@
     });
 
     new Tile(300, 500, {
-        isStatic: true, shape: new Shapes.Rectangle(10, 100), world,
+        isStatic: true, shape: new Shapes.Rectangle(10, 200), world,
         kineticFrictionCoefficient: 0, staticFrictionCoefficient: 0,
         rotation: Math.PI / 3
     });
 
-    addEventListener("dblclick", ev => {
-        const vec = world.getMouseVector(ev).sub(tile);
-        const a = Math.atan2(vec.x, vec.y);
-        const x = Math.sin(a);
-        const y = Math.cos(a);
-        tile.force.set(new Vector2(x, y).scale(10));
-    });
     window.tt = tile;
     window.ww = world;
 </script>
