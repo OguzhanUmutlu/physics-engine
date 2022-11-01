@@ -105,23 +105,30 @@
     }
 
     Circle.prototype.draw = function (world, tile) {
-        const t = world.translation;
         const ctx = world.ctx;
         ctx.save();
+        ctx.translate(world.translation.x, world.translation.y);
         ctx.fillStyle = this.fill;
         ctx.strokeStyle = this.stroke;
         ctx.beginPath();
-        ctx.arc(t.x + tile.x, t.y + tile.y, this.radius, 0, PI * 2);
+        ctx.scale(world.scale, world.scale);
+        ctx.arc(tile.x, tile.y, this.radius, 0, PI * 2);
         if (this.fill) ctx.fill();
         if (this.stroke) ctx.stroke();
         ctx.closePath();
+        const rnd = world.options.render;
+        const rndCls = rnd.collisions;
+        ctx.fillStyle = rndCls.color;
+        ctx.fillRect(tile.x - rndCls.size / 2, tile.y - rndCls.size / 2, rndCls.size, rndCls.size);
+        if (tile.lastMoveGround) ctx.fillRect(tile.x, tile.lastMoveGround.interY, 5, 5);
         ctx.restore();
     };
 
-    function Polygon(path) {
+    function PathShape(path) {
         this.fill = "#000000";
         this.stroke = "";
-        this.type = "polygon";
+        this.type = "path";
+        this.isPathShape = true;
         Object.defineProperty(this, "path", {
             get: () => path,
             set: v => {
@@ -131,7 +138,7 @@
         });
     }
 
-    Polygon.prototype.draw = function (world, tile) {
+    PathShape.prototype.draw = function (world, tile) {
         const ctx = world.ctx;
         ctx.save();
         ctx.translate(world.translation.x, world.translation.y);
@@ -163,7 +170,48 @@
         ctx.fillStyle = rndCls.color;
         (this._lastPoints || this.path).forEach(i => ctx.fillRect(tile.x + i.y - rndCls.size / 2, tile.y + i.y - rndCls.size / 2, rndCls.size, rndCls.size));
         ctx.fillRect(tile.x - rndCls.size / 2, tile.y - rndCls.size / 2, rndCls.size, rndCls.size);
+        if (tile.lastMoveGround) ctx.fillRect(tile.x, tile.lastMoveGround.interY, 5, 5);
         ctx.restore();
+    };
+
+    function Polygon(sides, radius) {
+        this.fill = "#000000";
+        this.stroke = "";
+        this.type = "polygon";
+        this.isPathShape = true;
+        this._sides = sides;
+        this._radius = radius;
+        this.setSides(sides);
+        Object.defineProperties(this, {
+            sides: {
+                get: () => this._sides,
+                set: v => {
+                    this._sides = v;
+                    this.setSides(this._sides);
+                }
+            },
+            radius: {
+                get: () => this._radius,
+                set: v => {
+                    this._radius = v;
+                    this.setRadius(this._radius);
+                }
+            }
+        });
+    }
+
+    Polygon.prototype.setRadius = function (radius) {
+        this._radius = radius;
+        this.setSides(this._sides);
+    };
+    Polygon.prototype.setSides = function (sides) {
+        this._sides = sides;
+        this.path = [..." ".repeat(sides)].map((_, i) => [sin(PI * 2 / sides * (i - .5)) * this._radius, cos(PI * 2 / sides * (i - .5)) * this._radius]);
+        this.path.push(this.path[0]);
+    };
+    Polygon.prototype.setRadiusAndSides = function (radius, sides) {
+        this._radius = radius;
+        this.setSides(sides);
     };
 
     function Rectangle(width, height) {
@@ -171,27 +219,30 @@
         this.stroke = "";
         this.setSize(width, height);
         this.type = "rectangle";
+        this.isPathShape = true;
+        this._width = width;
+        this._height = height;
         Object.defineProperties(this, {
             width: {
-                get: () => width,
+                get: () => this._width,
                 set: v => {
-                    width = v;
-                    this.setSize(width, height);
+                    this._width = v;
+                    this.setSize(this._width, this._height);
                 }
             },
             height: {
-                get: () => height,
+                get: () => this._height,
                 set: v => {
-                    height = v;
-                    this.setSize(width, height);
+                    this._height = v;
+                    this.setSize(this._width, this._height);
                 }
             }
         });
     }
 
     Rectangle.prototype.setSize = function (width, height) {
-        this.width = width;
-        this.height = height;
+        this._width = width;
+        this._height = height;
         this.path = [
             [-width / 2, -height / 2],
             [width / 2, -height / 2],
@@ -206,7 +257,8 @@
         Vector2.apply(this, arguments);
         opts = processOptions(opts, {
             shape: null, rotation: 0, isStatic: false, world: null, mass: 10,
-            staticFrictionCoefficient: 0, kineticFrictionCoefficient: 0, dragCoefficient: 1
+            staticFrictionCoefficient: 0, kineticFrictionCoefficient: 0, dragCoefficient: 1,
+            gravityEnabled: true
         }, 1);
         const id = _id++;
         tiles[id] = this;
@@ -214,14 +266,16 @@
             get: () => id
         });
         this.shape = opts.shape;
-        this.rotation = opts.rotation;
-        this.rotationTarget = opts.rotation;
+        if (typeof opts.angle === "number") {
+            this.setAngle(opts.angle);
+        } else this.setRotation(opts.rotation);
         this.verticalVelocity = 0;
         this.horizontalVelocity = 0;
         this.force = Vector2.zero();
         this.motion = Vector2.zero();
         this.mass = opts.mass;
         this.isStatic = opts.isStatic;
+        this.gravityEnabled = opts.gravityEnabled;
         this.dragCoefficient = opts.dragCoefficient;
         this.staticFrictionCoefficient = opts.staticFrictionCoefficient;
         this.kineticFrictionCoefficient = opts.kineticFrictionCoefficient;
@@ -234,6 +288,13 @@
 
     Tile.getById = function (id) {
         return tiles[id];
+    };
+    Tile.prototype.setRotation = function (radians) {
+        this.rotationTarget = radians;
+        this.rotation = radians;
+    };
+    Tile.prototype.setAngle = function (angle) {
+        this.setRotation(angle / 180 * PI);
     };
     Tile.prototype.getRadius = function () {
         switch (this.shape?.type) {
@@ -324,14 +385,20 @@
                 return false;
         }
     };
-    Tile.prototype.getCollisions = function (world) {
+    Tile.prototype.getCollision = function (world) {
         return Array.from(world.tiles).find(i => i !== this && i.collidesWith(this));
     };
+    Tile.prototype.getCollisions = function (world) {
+        return Array.from(world.tiles).filter(i => i !== this && i.collidesWith(this));
+    };
     Tile.prototype.move = function (world, vec) {
-        //if (this.isStatic) return false;
+        if (this.isStatic) return false;
         let collision;
-        collision = this.getCollisions(world);
-        if (collision) return false;
+        collision = this.getCollision(world);
+        if (collision) {
+            this.airTicks = 0;
+            return false;
+        }
         let back;
         const start = this.clone();
         // let's ray-cast?
@@ -343,13 +410,13 @@
             back = this.clone();
             if (i === dist - 1) this.set(start.add(vec));
             else this.set(this.add(moveVec));
-            collision = this.getCollisions(world);
+            collision = this.getCollision(world);
             if (collision) break;
         }
         if (collision) {
             this.lastMoveGround = {tile: collision};
             this.airTicks = 0;
-            if (collision.shape && (collision.shape.type === "polygon" || collision.shape.type === "rectangle")) {
+            if (collision.shape && collision.shape.isPathShape) {
                 const shapePath = (collision.shape._lastPoints || collision.shape.path);
                 const nearest = shapePath.map((i, j) => {
                     const next = shapePath[shapePath.length === j + 1 ? 0 : j + 1];
@@ -373,15 +440,17 @@
                     //const vec = [(this.x + a * (this.y - c)) / mag, (a * this.x + a ** 2 * (this.y - c)) / mag + c];
                     const vecY = (a * this.x + a ** 2 * (this.y - c)) / mag + c;
                     return [a, vecY];
-                }).sort((a, b) => b[1] - a[1])[0];
+                }).filter(i => this.y <= i[1]).sort((a, b) => b[1] - a[1])[0];
                 if (nearest) {
                     if (abs(nearest[0]) === Infinity) nearest[0] = 0;
                     this.lastMoveGround.slope = nearest[0];
                     this.rotationTarget = -atan(nearest[0]);
                     this.lastMoveGround.rotation = -atan(nearest[0]);
+                    this.lastMoveGround.interY = nearest[1];
                     if (this.rotationTarget === 90) this.rotationTarget = 0;
                 }
             }
+            this.lastMoveGround.collided = collision;
             this.set(back);
             return false;
         }
@@ -391,49 +460,49 @@
         if (!deltaTime) return;
         if (this.dist(world.translation) > sqrt((world.canvas.width * (1 / world.scale)) ** 2 + (world.canvas.height * (1 / world.scale)) ** 2) / 2 + world.updateDistance) return this.outOfDistance = true;
         this.outOfDistance = false;
-        if (deltaTime > 100) console.warn(deltaTime);
+        // TODO: add this as an option to the world
+        //if (deltaTime > 100) console.warn(deltaTime);
         // NOTE: I got the square root of the bottom area(not sure what I could have done)
         const terminalVelocity = sqrt(2 * this.mass * world.gravityAcceleration / (world.fluidDensity * sqrt(this.getBottomArea()) * this.dragCoefficient));
         if (!this.isStatic) {
-            this.verticalVelocity += (this.mass * world.gravityAcceleration + this.force.y / this.mass) * deltaTime / 1000;
-            if (!this.move(world, new Vector2(0, this.verticalVelocity))) this.verticalVelocity = 0;
+            if (isNaN(this.verticalVelocity)) this.verticalVelocity = 0;
+            if (isNaN(this.horizontalVelocity)) this.horizontalVelocity = 0;
+            if (this.gravityEnabled) this.verticalVelocity += (this.mass * world.gravityAcceleration + this.force.y / this.mass) * deltaTime / 1000;
+            if (!this.move(world, new Vector2(0, this.verticalVelocity))) {
+                if (this.lastMoveGround) this.lastMoveGround.collided.verticalVelocity += this.verticalVelocity;
+                this.verticalVelocity = 0;
+            }
 
             this.horizontalVelocity += this.getHorizontalAcceleration(world) * deltaTime / 1000;
-            if (!this.move(world, new Vector2(sin(this.rotation + PI / 2) * this.horizontalVelocity, cos(this.rotation + PI / 2) * this.horizontalVelocity))) this.horizontalVelocity = 0;
+            if (!this.move(world, new Vector2(sin(this.rotation + PI / 2) * this.horizontalVelocity, cos(this.rotation + PI / 2) * this.horizontalVelocity))) {
+                if (this.lastMoveGround) this.lastMoveGround.collided.horizontalVelocity += this.horizontalVelocity;
+                this.horizontalVelocity = 0;
+            }
             if (this.airTicks > 3) {
-                if (this.rotationTarget > 0) this.rotationTarget -= Math.PI / 180;
-                if (this.rotationTarget < 0) this.rotationTarget += Math.PI / 180;
+                if (this.rotationTarget > 0) this.rotationTarget -= Math.PI / 180 * (this.verticalVelocity);
+                if (this.rotationTarget < 0) this.rotationTarget += Math.PI / 180 * (this.verticalVelocity);
             }
         }
         if (round(this.motion.x) !== 0 && round(this.motion.y) !== 0) this.move(world, new Vector2(this.motion.x / 10, this.motion.y / 10));
         this.motion.set(this.motion.scale(9 / 10));
-        this.rotation += (this.rotationTarget - this.rotation) / 2;
-        this.airTicks++;
+        //let befRotation = this.rotation;
+        this.rotation = this.rotationTarget;
+        //if (this.getCollision(world)) this.rotation = befRotation;
+        if (!this.isStatic) this.airTicks++;
     };
     Tile.prototype.isOnGround = function () {
         return this.airTicks <= 2 && !!this.lastMoveGround;
     };
-    Tile.prototype.getGroundFrictionForce = function (world) {
-        const onGround = this.isOnGround();
-        const μk = onGround ? this.lastMoveGround.tile.kineticFrictionCoefficient : 0;
-        const μs = onGround ? this.lastMoveGround.tile.staticFrictionCoefficient : 0;
-        const groundRotation = onGround ? this.lastMoveGround.rotation : 0;
-        const gh = this.mass * world.gravityAcceleration * -sin(groundRotation);
-        const gv = this.mass * world.gravityAcceleration * cos(groundRotation);
-        const Fh = this.force.x / (-sin(groundRotation) || 1);
-        const Fv = this.force.y / cos(groundRotation);
-        const N = gv + Fv;
-        const totalH = gh + Fh;
-        if (onGround) {
-            const Ffk = μk * N;
-            const Ffs = μs * N;
-            return {
-                hasPassedStatic: totalH > Ffs,
-                frictionForce: totalH > Ffs ? Ffk : totalH,
-                kineticCoefficient: μk, staticCoefficient: μs
-            };
-        } else return {
-            hasPassedStatic: false, frictionForce: 0, kineticCoefficient: 0, staticCoefficient: 0
+    Tile.prototype.getLastGroundFrictionForce = function () {
+        if (!this._lastHorizontalAcceleration || !this.isOnGround()) return {
+            frictionForce: 0,
+            kineticCoefficient: 0,
+            staticCoefficient: 0
+        };
+        return {
+            frictionForce: this._Fs,
+            kineticCoefficient: this._lastHorizontalAcceleration[1],
+            staticCoefficient: this._lastHorizontalAcceleration[2]
         };
     };
     Tile.prototype.getHorizontalAcceleration = function (world) {
@@ -442,30 +511,33 @@
         const μk = onGround ? this.lastMoveGround.tile.kineticFrictionCoefficient : 0;
         const μs = onGround ? this.lastMoveGround.tile.staticFrictionCoefficient : 0;
         const groundRotation = onGround ? this.lastMoveGround.rotation : 0;
-        if (this._lastHorizontalAcceleration[0] === onGround && this._lastHorizontalAcceleration[1] === μk && this._lastHorizontalAcceleration[2] === μs && this._lastHorizontalAcceleration[3] === groundRotation) return this._lastHorizontalAcceleration[4];
-        this._lastHorizontalAcceleration = [
-            onGround, μk, μs, groundRotation
+        const expected = [
+            onGround, μk, μs, groundRotation, this.force.x, this.force.y
         ];
+        if (expected.every((i, j) => i === this._lastHorizontalAcceleration[j])) return this._lastHorizontalAcceleration[6];
+        this._lastHorizontalAcceleration = expected;
 
         const gh = this.mass * world.gravityAcceleration * -sin(groundRotation);
         const gv = this.mass * world.gravityAcceleration * cos(groundRotation);
 
         const Fh = this.force.x / (-sin(groundRotation) || 1);
-        const Fv = this.force.y / cos(groundRotation);
+        const Fv = this.force.y / (cos(groundRotation) || 1);
 
         const N = gv + Fv;
-        const totalH = gh + Fh;
-
-        let FNet = totalH;
+        this._N = N;
+        let FNet = gh + Fh;
+        this._Fs = 0;
 
         if (onGround) {
             const Ffk = μk * N;
             const Ffs = μs * N;
-            const Fs = totalH > Ffs ? Ffk : totalH;
+            const Fs = FNet > Ffs ? Ffk : FNet;
             FNet -= Fs;
+            this._Fs = Fs;
         }
-        this._lastHorizontalAcceleration[4] = FNet / this.mass;
-        return this._lastHorizontalAcceleration[4];
+        this._FNet = FNet;
+        this._lastHorizontalAcceleration[6] = FNet / this.mass;
+        return this._lastHorizontalAcceleration[6];
     };
     Tile.prototype.resetVelocities = function () {
         this.verticalVelocity = 0;
@@ -546,10 +618,11 @@
         let _fps = [];
         let frameId = null;
         let timeScale = 1.0;
+        let method = "frame";
         const animate = async (repeat = true) => {
             fn.forEach(i => i());
             if (timeScale <= 1) {
-                for (let i = 0; i < 1 / timeScale; i++) await new Promise(r => frameId = _requestAnimationFrame(r));
+                for (let i = 0; i < 1 / timeScale; i++) await new Promise(r => frameId = (method === "frame" ? _requestAnimationFrame : setTimeout)(r));
             } else {
                 for (let i = 0; i < timeScale; i++) await new Promise(r => setTimeout(async () => {
                     await animate(false);
@@ -572,7 +645,8 @@
             setTimeScale: v => timeScale = v,
             getTimeScale: () => timeScale,
             addCallback: cb => fn.add(cb),
-            removeCallback: cb => fn.delete(cb)
+            removeCallback: cb => fn.delete(cb),
+            setMethod: m => method = m
         };
     }
 
@@ -647,17 +721,16 @@
             const vec = world.getMouseVector(ev);
             drag.tile.set(drag.tileVec.add(vec.sub(drag.mouse)));
             drag.tile.resetVelocities();
+            drag.tile.rotationTarget = 0;
         });
-        l(el, "mouseup", () => {
+        const done = () => {
             down = false;
             if (drag) drag.tile.isStatic = drag.gravity;
             drag = null;
-        });
-        l(window, "blur", () => {
-            down = false;
-            if (drag) drag.tile.isStatic = drag.gravity;
-            drag = null;
-        });
+        };
+        l(el, "mouseup", done);
+        l(window, "blur", done);
+        l(window, "mouseout", done);
         return {
             remove: () => {
                 listeners.forEach(i => i[0].removeEventListener(...i.slice(1)));
@@ -697,6 +770,7 @@
             });
             l(el, "mouseup", () => moving = false);
             l(window, "blur", () => moving = false);
+            l(window, "mouseout", () => moving = false);
         }
         return {
             remove: () => {
@@ -706,12 +780,13 @@
         };
     }
 
-    extendClass(Rectangle, Polygon);
+    extendClass(Polygon, PathShape);
+    extendClass(Rectangle, PathShape);
     extendClass(Tile, Vector2);
 
     _exports.Phygic = {
         Vector2,
-        Shapes: {Circle, Polygon, Rectangle},
+        Shapes: {Circle, PathShape, Polygon, Rectangle},
         Tile,
         World,
         Utils: {Animator, CanvasResizer, centerCanvas, MouseConstraint, CameraMover},
