@@ -51,6 +51,7 @@
             () => `θ = ${(tile.rotation / Math.PI * 180).toFixed(2)}°`,
             () => `N = ${(tile._N || 0).toFixed(2)} N`,
             () => `F<sub>f</sub> = ${frictionInfo.frictionForce.toFixed(2)} N`,
+            () => `a<sub>f</sub> = ${(frictionInfo.frictionForce / tile.mass).toFixed(2)} N`,
             () => `μ<sub>s</sub> = ${frictionInfo.staticCoefficient.toFixed(2)}`,
             () => `μ<sub>k</sub> = ${frictionInfo.kineticCoefficient.toFixed(2)}`,
         ];
@@ -104,6 +105,8 @@
         kineticFrictionCoefficient: 0.2, staticFrictionCoefficient: 0.4,
         angle: 60
     });
+
+    addEventListener("contextmenu", ev => ev.preventDefault());
 
     window.tt = tile;
     window.ww = world;

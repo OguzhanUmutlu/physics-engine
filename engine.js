@@ -406,16 +406,8 @@
         //const radius = this.getRadius();
         const moveVec = new Vector2(sin(lRotation), cos(lRotation));//.scale(radius/2);
         const dist = min(ceil(vec.len() / moveVec.len()), world.maxRayCastingIterations);
-        for (let i = 0; i < dist; i++) {
-            back = this.clone();
-            if (i === dist - 1) this.set(start.add(vec));
-            else this.set(this.add(moveVec));
-            collision = this.getCollision(world);
-            if (collision) break;
-        }
-        if (collision) {
-            this.lastMoveGround = {tile: collision};
-            this.airTicks = 0;
+        const applyCollisionRotation = () => {
+            const last = {};
             if (collision.shape && collision.shape.isPathShape) {
                 const shapePath = (collision.shape._lastPoints || collision.shape.path);
                 const nearest = shapePath.map((i, j) => {
@@ -443,14 +435,32 @@
                 }).filter(i => this.y <= i[1]).sort((a, b) => b[1] - a[1])[0];
                 if (nearest) {
                     if (abs(nearest[0]) === Infinity) nearest[0] = 0;
-                    this.lastMoveGround.slope = nearest[0];
+                    last.slope = nearest[0];
                     this.rotationTarget = -atan(nearest[0]);
-                    this.lastMoveGround.rotation = -atan(nearest[0]);
-                    this.lastMoveGround.interY = nearest[1];
+                    last.rotation = -atan(nearest[0]);
+                    last.interY = nearest[1];
                     if (this.rotationTarget === 90) this.rotationTarget = 0;
                 }
             }
-            this.lastMoveGround.collided = collision;
+            return last;
+        };
+        let rotationChecked = null;
+        for (let i = 0; i < dist; i++) {
+            back = this.clone();
+            if (i === dist - 1) this.set(start.add(vec));
+            else this.set(this.add(moveVec));
+            collision = this.getCollision(world);
+            if (collision) {
+                rotationChecked = applyCollisionRotation();
+                if (this.getCollision(world)) break;
+            }
+        }
+        if (collision) {
+            this.airTicks = 0;
+            if (rotationChecked) {
+                this.lastMoveGround = rotationChecked;
+                this.lastMoveGround.tile = collision;
+            }
             this.set(back);
             return false;
         }
@@ -460,27 +470,33 @@
         if (!deltaTime) return;
         if (this.dist(world.translation) > sqrt((world.canvas.width * (1 / world.scale)) ** 2 + (world.canvas.height * (1 / world.scale)) ** 2) / 2 + world.updateDistance) return this.outOfDistance = true;
         this.outOfDistance = false;
+        // TODO: BUG: it sometimes stands on 29-28 degrees instead of 30
         // TODO: add this as an option to the world
         //if (deltaTime > 100) console.warn(deltaTime);
         // NOTE: I got the square root of the bottom area(not sure what I could have done)
+        // TODO: when moving transfer the acceleration to the top one and add horizontal friction forces to both
         const terminalVelocity = sqrt(2 * this.mass * world.gravityAcceleration / (world.fluidDensity * sqrt(this.getBottomArea()) * this.dragCoefficient));
         if (!this.isStatic) {
             if (isNaN(this.verticalVelocity)) this.verticalVelocity = 0;
             if (isNaN(this.horizontalVelocity)) this.horizontalVelocity = 0;
             if (this.gravityEnabled) this.verticalVelocity += (this.mass * world.gravityAcceleration + this.force.y / this.mass) * deltaTime / 1000;
             if (!this.move(world, new Vector2(0, this.verticalVelocity))) {
-                if (this.lastMoveGround) this.lastMoveGround.collided.verticalVelocity += this.verticalVelocity;
+                if (this.lastMoveGround) this.lastMoveGround.tile.verticalVelocity += this.verticalVelocity;
                 this.verticalVelocity = 0;
             }
 
             this.horizontalVelocity += this.getHorizontalAcceleration(world) * deltaTime / 1000;
+            const frictionAcceleration = this._Fs / this.mass * deltaTime / 1000;
+            const pos = this.horizontalVelocity > 0;
+            this.horizontalVelocity += (pos ? -1 : 1) * frictionAcceleration;
+            if (pos !== (this.horizontalVelocity > 0)) this.horizontalVelocity = 0
             if (!this.move(world, new Vector2(sin(this.rotation + PI / 2) * this.horizontalVelocity, cos(this.rotation + PI / 2) * this.horizontalVelocity))) {
-                if (this.lastMoveGround) this.lastMoveGround.collided.horizontalVelocity += this.horizontalVelocity;
+                if (this.lastMoveGround) this.lastMoveGround.tile.horizontalVelocity += this.horizontalVelocity;
                 this.horizontalVelocity = 0;
             }
             if (this.airTicks > 3) {
-                if (this.rotationTarget > 0) this.rotationTarget -= Math.PI / 180 * (this.verticalVelocity);
-                if (this.rotationTarget < 0) this.rotationTarget += Math.PI / 180 * (this.verticalVelocity);
+                if (this.rotationTarget > 0) this.rotationTarget -= Math.PI / 180 * this.verticalVelocity;
+                if (this.rotationTarget < 0) this.rotationTarget += Math.PI / 180 * this.verticalVelocity;
             }
         }
         if (round(this.motion.x) !== 0 && round(this.motion.y) !== 0) this.move(world, new Vector2(this.motion.x / 10, this.motion.y / 10));
@@ -531,9 +547,12 @@
         if (onGround) {
             const Ffk = μk * N;
             const Ffs = μs * N;
-            const Fs = FNet > Ffs ? Ffk : FNet;
-            FNet -= Fs;
+            let Fs = FNet > Ffs ? Ffk : FNet;
+            if (FNet === 0) Fs = Ffk;
+            //FNet += (FNet > 0 ? -1 : 1) * Fs;
             this._Fs = Fs;
+            this._Ffk = Ffk;
+            this._Ffs = Ffs;
         }
         this._FNet = FNet;
         this._lastHorizontalAcceleration[6] = FNet / this.mass;
@@ -557,6 +576,7 @@
             ["scale", 1],
             ["maxRayCastingIterations", 1000],
             ["updateDistance", 10000],
+            ["timeScale", 1]
         ], 2);
         this.options = options;
         this.scale = options.scale;
@@ -568,6 +588,7 @@
         this.fluidDensity = 1.225;
         this.maxRayCastingIterations = options.maxRayCastingIterations;
         this.updateDistance = options.updateDistance;
+        this.timeScale = options.timeScale;
         const id = _id++;
         worlds[id] = this;
         Object.defineProperty(this, "id", {
@@ -576,7 +597,7 @@
         this.update = function () {
             const self = worlds[id];
             self.tiles.forEach(function (tile) {
-                tile.update(self, tile.lastUpdate ? Date.now() - tile.lastUpdate : 0);
+                tile.update(self, (tile.lastUpdate ? Date.now() - tile.lastUpdate : 0) * self.timeScale);
                 tile.lastUpdate = Date.now();
             });
         };
@@ -721,7 +742,6 @@
             const vec = world.getMouseVector(ev);
             drag.tile.set(drag.tileVec.add(vec.sub(drag.mouse)));
             drag.tile.resetVelocities();
-            drag.tile.rotationTarget = 0;
         });
         const done = () => {
             down = false;
