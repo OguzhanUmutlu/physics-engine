@@ -395,17 +395,10 @@
         if (this.isStatic) return false;
         let collision;
         collision = this.getCollision(world);
-        if (collision) {
+        /*if (collision) {
             this.airTicks = 0;
             return false;
-        }
-        let back;
-        const start = this.clone();
-        // let's ray-cast?
-        const lRotation = atan2(vec.x, vec.y);
-        //const radius = this.getRadius();
-        const moveVec = new Vector2(sin(lRotation), cos(lRotation));//.scale(radius/2);
-        const dist = min(ceil(vec.len() / moveVec.len()), world.maxRayCastingIterations);
+        }*/
         const applyCollisionRotation = () => {
             const last = {};
             if (collision.shape && collision.shape.isPathShape) {
@@ -444,6 +437,18 @@
             }
             return last;
         };
+
+        let back;
+        let backRotation = this.rotationTarget;
+        const start = this.clone();
+        // let's ray-cast?
+        const lRotation = atan2(vec.x, vec.y);
+        //const radius = this.getRadius();
+        const moveVec = new Vector2(sin(lRotation), cos(lRotation));//.scale(radius/2);
+        const expectedDist = ceil(vec.len() / moveVec.len());
+        const dist = min(expectedDist, world.maxRayCastingIterations);
+        const moveScalar = expectedDist / dist;
+        moveVec.set(moveVec.scale(moveScalar));
         let rotationChecked = null;
         for (let i = 0; i < dist; i++) {
             back = this.clone();
@@ -451,10 +456,12 @@
             else this.set(this.add(moveVec));
             collision = this.getCollision(world);
             if (collision) {
+                backRotation = this.rotationTarget;
                 rotationChecked = applyCollisionRotation();
                 if (this.getCollision(world)) break;
             }
         }
+
         if (collision) {
             this.airTicks = 0;
             if (rotationChecked) {
@@ -462,6 +469,7 @@
                 this.lastMoveGround.tile = collision;
             }
             this.set(back);
+            this.rotation = backRotation;
             return false;
         }
         return true;
@@ -470,11 +478,13 @@
         if (!deltaTime) return;
         if (this.dist(world.translation) > sqrt((world.canvas.width * (1 / world.scale)) ** 2 + (world.canvas.height * (1 / world.scale)) ** 2) / 2 + world.updateDistance) return this.outOfDistance = true;
         this.outOfDistance = false;
-        // TODO: BUG: it sometimes stands on 29-28 degrees instead of 30
-        // TODO: add this as an option to the world
-        //if (deltaTime > 100) console.warn(deltaTime);
+        // FIXED TO DO: BUG: it sometimes stands on 29-28 degrees instead of 30
+        // FIXED TO DO: add this as an option to the world
+        if (world.warnOverDeltaTime && deltaTime > 100 / world.timeScale) console.warn(deltaTime);
         // NOTE: I got the square root of the bottom area(not sure what I could have done)
         // TODO: when moving transfer the acceleration to the top one and add horizontal friction forces to both
+        // TODO: constraints/ropes
+        // TODO: increase the normal vector whilst something is on top of that tile
         const terminalVelocity = sqrt(2 * this.mass * world.gravityAcceleration / (world.fluidDensity * sqrt(this.getBottomArea()) * this.dragCoefficient));
         if (!this.isStatic) {
             if (isNaN(this.verticalVelocity)) this.verticalVelocity = 0;
@@ -576,7 +586,9 @@
             ["scale", 1],
             ["maxRayCastingIterations", 1000],
             ["updateDistance", 10000],
-            ["timeScale", 1]
+            ["timeScale", 1],
+            ["gravityAcceleration", 2],
+            ["warnOverDeltaTime", false]
         ], 2);
         this.options = options;
         this.scale = options.scale;
@@ -584,11 +596,12 @@
         this.tiles = new Set;
         this.canvas = canvas;
         this.ctx = canvas.getContext ? canvas.getContext("2d") : options.ctx;
-        this.gravityAcceleration = 2; // px / second
+        this.gravityAcceleration = options.gravityAcceleration; // px / second^2
         this.fluidDensity = 1.225;
         this.maxRayCastingIterations = options.maxRayCastingIterations;
         this.updateDistance = options.updateDistance;
         this.timeScale = options.timeScale;
+        this.warnOverDeltaTime = options.warnOverDeltaTime;
         const id = _id++;
         worlds[id] = this;
         Object.defineProperty(this, "id", {
