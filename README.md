@@ -86,7 +86,7 @@ new Phygic.Tile(50, 500, {world, isStatic: true});
 
 ## Final product:
 
-[Preview](https://oguzhanumutlu.github.io/example.html)
+[Preview](https://oguzhanumutlu.github.io/physics-engine/example.html)
 
 ```html
 <body>
