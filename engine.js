@@ -170,9 +170,9 @@
         const rnd = world.options.render;
         const rndCls = rnd.collisions;
         ctx.fillStyle = rndCls.color;
-        (this._lastPoints || this.path).forEach(i => ctx.fillRect(tile.x + i.y - rndCls.size / 2, tile.y + i.y - rndCls.size / 2, rndCls.size, rndCls.size));
+        if (rndCls.color) (this._lastPoints || this.path).forEach(i => ctx.fillRect(tile.x + i.y - rndCls.size / 2, tile.y + i.y - rndCls.size / 2, rndCls.size, rndCls.size));
         ctx.fillRect(tile.x - rndCls.size / 2, tile.y - rndCls.size / 2, rndCls.size, rndCls.size);
-        if (tile.lastMoveGround) ctx.fillRect(tile.x, tile.lastMoveGround.interY, 5, 5);
+        //if (tile.lastMoveGround ) ctx.fillRect(tile.x, tile.lastMoveGround.interY, 5, 5);
         ctx.restore();
     };
 

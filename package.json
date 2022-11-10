@@ -1,6 +1,6 @@
 {
   "name": "physics-engine",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Physics engine that I made with the stuff we learned in school",
   "main": "engine.min.js",
   "scripts": {},
