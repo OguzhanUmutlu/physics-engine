@@ -1,3 +1,5 @@
+// noinspection JSUnusedGlobalSymbols, JSUnusedLocalSymbols
+
 (async function () {
     const isWeb = typeof window === "object" && typeof require === "undefined";
     const _global = isWeb ? window : global;
@@ -8,7 +10,7 @@
     const Collider2D = isWeb ? await (async function () {
         if (typeof window.Collider2D !== "undefined") return Collider2D;
         const script = document.createElement("script");
-        script.src = "./collider2d.js";
+        script.src = "./collider2d.min.js";
         document.body.appendChild(script)
         await new Promise(r => script.onload = r);
         return window.Collider2D;
@@ -255,8 +257,9 @@
 
     function Tile(x = 0, y = 0, opts) {
         Vector2.apply(this, arguments);
+        if (opts instanceof World) opts = {world: opts};
         opts = processOptions(opts, {
-            shape: null, rotation: 0, isStatic: false, world: null, mass: 10,
+            shape: new Rectangle(20, 20), rotation: 0, isStatic: false, world: null, mass: 10,
             staticFrictionCoefficient: 0, kineticFrictionCoefficient: 0, dragCoefficient: 1,
             gravityEnabled: true
         }, 1);
@@ -438,7 +441,7 @@
             return last;
         };
 
-        let back;
+        let back = this.clone();
         let backRotation = this.rotationTarget;
         const start = this.clone();
         // let's ray-cast?
@@ -476,12 +479,13 @@
     };
     Tile.prototype.update = function (world, deltaTime) {
         if (!deltaTime) return;
-        if (this.dist(world.translation) > sqrt((world.canvas.width * (1 / world.scale)) ** 2 + (world.canvas.height * (1 / world.scale)) ** 2) / 2 + world.updateDistance) return this.outOfDistance = true;
+        if (this.dist(world.translation) > sqrt(((world.canvas ? world.canvas.width : 1000) * (1 / world.scale)) ** 2 + ((world.canvas ? world.canvas.height : 1000) * (1 / world.scale)) ** 2) / 2 + world.updateDistance) return this.outOfDistance = true;
         this.outOfDistance = false;
         // FIXED TO DO: BUG: it sometimes stands on 29-28 degrees instead of 30
         // FIXED TO DO: add this as an option to the world
         if (world.warnOverDeltaTime && deltaTime > 100 / world.timeScale) console.warn(deltaTime);
         // NOTE: I got the square root of the bottom area(not sure what I could have done)
+        // TODO: BUG: when there is a sloped and a horizontal surface and put the tile on top of the sloped it stops when it touches the horizontal surface
         // TODO: when moving transfer the acceleration to the top one and add horizontal friction forces to both
         // TODO: constraints/ropes
         // TODO: increase the normal vector whilst something is on top of that tile
@@ -534,11 +538,11 @@
     Tile.prototype.getHorizontalAcceleration = function (world) {
         if (!this._lastHorizontalAcceleration) this._lastHorizontalAcceleration = [];
         const onGround = this.isOnGround();
-        const μk = onGround ? this.lastMoveGround.tile.kineticFrictionCoefficient : 0;
-        const μs = onGround ? this.lastMoveGround.tile.staticFrictionCoefficient : 0;
+        const mik = onGround ? this.lastMoveGround.tile.kineticFrictionCoefficient : 0;
+        const mis = onGround ? this.lastMoveGround.tile.staticFrictionCoefficient : 0;
         const groundRotation = onGround ? this.lastMoveGround.rotation : 0;
         const expected = [
-            onGround, μk, μs, groundRotation, this.force.x, this.force.y
+            onGround, mik, mis, groundRotation, this.force.x, this.force.y
         ];
         if (expected.every((i, j) => i === this._lastHorizontalAcceleration[j])) return this._lastHorizontalAcceleration[6];
         this._lastHorizontalAcceleration = expected;
@@ -555,8 +559,8 @@
         this._Fs = 0;
 
         if (onGround) {
-            const Ffk = μk * N;
-            const Ffs = μs * N;
+            const Ffk = mik * N;
+            const Ffs = mis * N;
             let Fs = FNet > Ffs ? Ffk : FNet;
             if (FNet === 0) Fs = Ffk;
             //FNet += (FNet > 0 ? -1 : 1) * Fs;
@@ -577,7 +581,12 @@
 
     const worlds = {};
 
-    function World(canvas, options) {
+    function World(options, a) {
+        if (options.getContext) {
+            if (typeof a !== "object" || Array.isArray(a)) a = {};
+            a.canvas = options;
+            options = a;
+        }
         options = processOptions(options, [
             ["render", {}],
             ["render.collisions", {}],
@@ -594,8 +603,8 @@
         this.scale = options.scale;
         this.translation = Vector2.zero();
         this.tiles = new Set;
-        this.canvas = canvas;
-        this.ctx = canvas.getContext ? canvas.getContext("2d") : options.ctx;
+        this.canvas = options.canvas;
+        this.ctx = options.canvas.getContext ? options.canvas.getContext("2d") : options.ctx;
         this.gravityAcceleration = options.gravityAcceleration; // px / second^2
         this.fluidDensity = 1.225;
         this.maxRayCastingIterations = options.maxRayCastingIterations;
@@ -625,6 +634,28 @@
 
     World.getById = function (id) {
         return worlds[id];
+    };
+    World.prototype.createAnimators = function (opt) {
+        opt = processOptions(opt, {
+            renderMethod: "frame",
+            updateMethod: "timeout"
+        });
+        const animators = Animator(this.render, this.update);
+        animators[0].setMethod(opt.renderMethod);
+        animators[1].setMethod(opt.updateMethod);
+        return animators;
+    };
+    World.prototype.addHelpers = function (opt) {
+        opt = processOptions(opt, {
+            center: true,
+            resize: true,
+            constraint: true,
+            mover: true
+        });
+        if (opt.center) centerCanvas(this.canvas);
+        if (opt.resize) CanvasResizer(this.canvas);
+        if (opt.constraint) MouseConstraint(this);
+        if (opt.mover) CameraMover(this);
     };
     World.prototype.translate = function (x, y) {
         this.translation.set(this.translation.add(new Vector2(x, y)));

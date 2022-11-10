@@ -6,22 +6,20 @@
 </head>
 <body>
 <canvas></canvas>
-<div class="board">
-
-</div>
+<div class="board"></div>
 <script src="engine.js"></script>
 <script type="module">
-    await window.Phygic;
     const {
         Vector2,
         Shapes,
         Tile,
         World,
         Utils: {Animator, CanvasResizer, centerCanvas, MouseConstraint, CameraMover}
-    } = window.Phygic;
+    } = await window.Phygic;
     const canvas = document.querySelector("canvas");
 
-    const world = new World(canvas, {
+    const world = new World({
+        canvas,
         render: {
             collisions: {
                 color: "#00ff00"

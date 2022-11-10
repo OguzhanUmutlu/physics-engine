@@ -1,0 +1,25 @@
+{
+  "name": "physics-engine",
+  "version": "1.0.3",
+  "description": "Physics engine that I made with the stuff we learned in school",
+  "main": "engine.min.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OguzhanUmutlu/physics-engine.git"
+  },
+  "keywords": [
+    "physics",
+    "engine",
+    "web",
+    "easy",
+    "usage",
+    "js"
+  ],
+  "author": "OguzhanUmutlu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/OguzhanUmutlu/physics-engine/issues"
+  },
+  "homepage": "https://github.com/OguzhanUmutlu/physics-engine#readme"
+}
