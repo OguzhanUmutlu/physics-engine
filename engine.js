@@ -10,7 +10,7 @@
     const Collider2D = isWeb ? await (async function () {
         if (typeof window.Collider2D !== "undefined") return Collider2D;
         const script = document.createElement("script");
-        script.src = "./collider2d.min.js";
+        script.src = "https://unpkg.com/physics-engine/collider2d.min.js"; // https://www.npmjs.com/collider2d
         document.body.appendChild(script)
         await new Promise(r => script.onload = r);
         return window.Collider2D;
@@ -317,12 +317,11 @@
             case "polygon":
             case "rectangle":
                 const a = this.shape.path.map(i => i[0]);
-                const w = a.sort((a, b) => b - a)[0] - a.sort((a, b) => a - b)[0];
-                const b = this.shape.path.map(i => i[1]);
-                const h = b.sort((a, b) => b - a)[0] - b.sort((a, b) => a - b)[0];
-                return w * h;
+                /*const b = this.shape.path.map(i => i[1]);
+                const h = b.sort((a, b) => b - a)[0] - b.sort((a, b) => a - b)[0];*/
+                return a.sort((a, b) => b - a)[0] - a.sort((a, b) => a - b)[0]; //* h;
             case "circle":// TODO: improvements
-                return PI * this.shape.radius;
+                return this.shape.radius;
         }
     };
     Tile.prototype.setShape = function (shape) {
@@ -489,11 +488,12 @@
         // TODO: when moving transfer the acceleration to the top one and add horizontal friction forces to both
         // TODO: constraints/ropes
         // TODO: increase the normal vector whilst something is on top of that tile
-        const terminalVelocity = sqrt(2 * this.mass * world.gravityAcceleration / (world.fluidDensity * sqrt(this.getBottomArea()) * this.dragCoefficient));
+        //const terminalVelocity = sqrt(2 * this.mass * world.gravityAcceleration / (world.fluidDensity * sqrt(this.getBottomArea()) * this.dragCoefficient));
+        const airFriction = (world.airResistanceCoefficient * this.verticalVelocity ** 2) / this.mass;
         if (!this.isStatic) {
             if (isNaN(this.verticalVelocity)) this.verticalVelocity = 0;
             if (isNaN(this.horizontalVelocity)) this.horizontalVelocity = 0;
-            if (this.gravityEnabled) this.verticalVelocity += (this.mass * world.gravityAcceleration + this.force.y / this.mass) * deltaTime / 1000;
+            if (this.gravityEnabled) this.verticalVelocity += (world.gravityAcceleration - airFriction + this.force.y / this.mass) * deltaTime / 1000;
             if (!this.move(world, new Vector2(0, this.verticalVelocity))) {
                 if (this.lastMoveGround) this.lastMoveGround.tile.verticalVelocity += this.verticalVelocity;
                 this.verticalVelocity = 0;
@@ -596,8 +596,9 @@
             ["maxRayCastingIterations", 1000],
             ["updateDistance", 10000],
             ["timeScale", 1],
-            ["gravityAcceleration", 2],
-            ["warnOverDeltaTime", false]
+            ["gravityAcceleration", 9.807],
+            ["warnOverDeltaTime", false],
+            ["airResistanceCoefficient", .24]
         ], 2);
         this.options = options;
         this.scale = options.scale;
@@ -611,6 +612,7 @@
         this.updateDistance = options.updateDistance;
         this.timeScale = options.timeScale;
         this.warnOverDeltaTime = options.warnOverDeltaTime;
+        this.airResistanceCoefficient = options.airResistanceCoefficient;
         const id = _id++;
         worlds[id] = this;
         Object.defineProperty(this, "id", {

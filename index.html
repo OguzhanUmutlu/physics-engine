@@ -35,26 +35,27 @@
             world.render();
         });
     } else {
-        const animators = Animator(world.update, world.render);
-        animators[0].setMethod("timeout");
+        const animators = Animator([world.update, world.render]);
+        animators.setMethod("timeout");
         let frictionInfo;
         const board = [
-            () => `${animators[1].getFPS()} frame/s`,
-            () => `${animators[0].getFPS()} update/s`,
+            () => `${animators.getFPS()} frame/s`,
+            () => `${animators.getFPS()} update/s`,
             () => `Δt = ${Date.now() - tile.lastUpdate} ms`,
             () => `t<sub>air</sub> = ${tile.airTicks}`,
             () => `g = ${world.gravityAcceleration.toFixed(2)} m/s<sup>2</sup>`,
             () => `m = ${tile.mass} kg`,
             () => `v<sub>v</sub> = ${tile.verticalVelocity.toFixed(2)} m/s`,
+            () => `F<sub>air</sub> = ${(world.airResistanceCoefficient * tile.verticalVelocity ** 2).toFixed(2)} m/s`,
             () => `v<sub>h</sub> = ${tile.horizontalVelocity.toFixed(2)} m/s`,
             () => `θ = ${(tile.rotation / Math.PI * 180).toFixed(2)}°`,
             () => `N = ${(tile._N || 0).toFixed(2)} N`,
             () => `F<sub>f</sub> = ${frictionInfo.frictionForce.toFixed(2)} N`,
-            () => `a<sub>f</sub> = ${(frictionInfo.frictionForce / tile.mass * (tile.horizontalVelocity >= 0 ? -1 : 1) * (tile.horizontalVelocity === 0 ? 0 : 1)).toFixed(2)} N`,
+            () => `F<sub>f2</sub> = ${(frictionInfo.frictionForce / tile.mass * (tile.horizontalVelocity >= 0 ? -1 : 1) * (tile.horizontalVelocity === 0 ? 0 : 1)).toFixed(2)} N`,
             () => `μ<sub>f<sub>s</sub></sub> = ${frictionInfo.staticCoefficient.toFixed(2)}`,
             () => `μ<sub>f<sub>k</sub></sub> = ${frictionInfo.kineticCoefficient.toFixed(2)}`,
         ];
-        animators[1].addCallback(() => {
+        animators.addCallback(() => {
             frictionInfo = tile.getLastGroundFrictionForce(world);
             document.querySelector(".board").innerHTML = board.map(i => `<div>${i()}</div>`).join("");
         });
@@ -67,7 +68,7 @@
 
     CameraMover(world);
 
-    const tile = new Tile(50, 0, {shape: new Shapes.Rectangle(20, 20), world, mass: 10});
+    const tile = new Tile(50, 0, {shape: new Shapes.Rectangle(20, 20), world, mass: 1});
     // mass - airTicks
     // 5    - 70
     // 10   - 50
