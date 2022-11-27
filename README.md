@@ -8,6 +8,10 @@ Used lots of trig functions and "Newton"s equations
 
 [Click to view new preview](https://oguzhanumutlu.github.io/physics-engine)
 
+# Preview
+
+![](./screenshots/ss.png)
+
 # Importing
 
 Just add this to your HTML to import it!
@@ -29,12 +33,21 @@ Just add this to your HTML to import it!
 ## Initializing physics engine
 
 ```html
-
 <script>
     window.Phygic.then(Phygic => {
         // your code goes here!
         console.log("Phygic has been loaded! ", Phygic);
     });
+</script>
+```
+
+### Or just use await it!
+
+```html
+<script type="module">
+    await window.Phygic;
+    // your code goes here!
+    console.log("Phygic has been loaded! ", Phygic);
 </script>
 ```
 
